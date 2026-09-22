@@ -1,0 +1,336 @@
+// ==========================================
+// BackOffice Engine — Core Schema (Fase 0/1)
+// Multi-tenant via tenant_id + RLS en Postgres (Supabase)
+// Columnas en snake_case (convención Supabase/Postgres) via @map
+// ==========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- TENANT / ORGANIZACION ----------
+
+model Tenant {
+  id           String       @id @default(uuid())
+  name         String
+  slug         String       @unique
+  logoUrl      String?      @map("logo_url")
+  primaryColor String?      @map("primary_color")
+  planId       String?      @map("plan_id")
+  status       TenantStatus @default(ACTIVE)
+  settings     Json         @default("{}")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  domains       TenantDomain[]
+  users         TenantUser[]
+  roles         Role[]
+  modules       TenantModule[]
+  subscription  Subscription?
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  auditLogs     AuditLog[]
+  apiKeys       ApiKey[]
+  webhooks      Webhook[]
+  files         FileAsset[]
+  distributors  Distributor[]
+
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  CANCELLED
+}
+
+model TenantDomain {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  domain    String   @unique
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_domains")
+}
+
+// ---------- USUARIOS / RBAC ----------
+
+model User {
+  id        String   @id @default(uuid()) // = auth.users.id de Supabase
+  email     String   @unique
+  fullName  String?  @map("full_name")
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenantMemberships TenantUser[]
+
+  @@map("users")
+}
+
+model TenantUser {
+  id       String           @id @default(uuid())
+  tenantId String           @map("tenant_id")
+  userId   String           @map("user_id")
+  roleId   String           @map("role_id")
+  status   TenantUserStatus @default(ACTIVE)
+  joinedAt DateTime         @default(now()) @map("joined_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@unique([tenantId, userId])
+  @@map("tenant_users")
+}
+
+enum TenantUserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  isSystem  Boolean  @default(false) @map("is_system") // Owner/Admin/Member no editables
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     TenantUser[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id        String @id @default(uuid())
+  key       String @unique // ej. "crm.write", "finance.delete"
+  moduleKey String @map("module_key")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ---------- MODULOS ----------
+
+model Module {
+  key         String  @id // "core", "crm", "projects"...
+  name        String
+  description String?
+  isCore      Boolean @default(false) @map("is_core") // true = no desactivable
+
+  tenants TenantModule[]
+
+  @@map("modules")
+}
+
+model TenantModule {
+  tenantId  String   @map("tenant_id")
+  moduleKey String   @map("module_key")
+  isEnabled Boolean  @default(true) @map("is_enabled")
+  settings  Json     @default("{}")
+  enabledAt DateTime @default(now()) @map("enabled_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleKey], references: [key])
+
+  @@id([tenantId, moduleKey])
+  @@map("tenant_modules")
+}
+
+// ---------- BILLING DEL SAAS ----------
+
+model Plan {
+  id         String @id @default(uuid())
+  name       String
+  priceCents Int    @map("price_cents")
+  interval   String // "monthly" | "yearly"
+  features   Json   @default("[]")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique @map("tenant_id")
+  planId           String   @map("plan_id")
+  status           String   // active, past_due, canceled, trialing
+  currentPeriodEnd DateTime @map("current_period_end")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+// ---------- NOTIFICACIONES / LOGS / AUDITORIA ----------
+
+model Notification {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  userId    String    @map("user_id")
+  title     String
+  body      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String?  @map("user_id")
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
+
+// Append-only por policy de RLS (sin UPDATE/DELETE permitidos a nivel app)
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String?  @map("user_id")
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+// ---------- API / INTEGRACIONES ----------
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  name       String
+  hashedKey  String    @unique @map("hashed_key")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+model Webhook {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  url       String
+  events    String[] // ej. ["crm.lead.created"]
+  secret    String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("webhooks")
+}
+
+// ---------- ARCHIVOS ----------
+
+model FileAsset {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  bucketPath String   @map("bucket_path") // referencia a Supabase Storage
+  fileName   String   @map("file_name")
+  mimeType   String   @map("mime_type")
+  sizeBytes  Int      @map("size_bytes")
+  uploadedBy String?  @map("uploaded_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("files")
+}
+
+// ==========================================
+// MODULO: RankFlow (Network Marketing)
+// Plan híbrido: Binario + Unilevel + Generaciones
+// Dos árboles independientes sobre el mismo distribuidor:
+//  - Árbol de COLOCACIÓN (binario): placementParentId + placementLeg
+//  - Árbol de PATROCINIO (unilevel/generaciones): sponsorId
+// ==========================================
+
+enum PlacementLeg {
+  LEFT
+  RIGHT
+}
+
+enum DistributorStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model Distributor {
+  id        String @id @default(uuid())
+  tenantId  String @map("tenant_id")
+  userId    String? @map("user_id") // opcional: si el distribuidor también es User del sistema
+  code      String // ID de distribuidor visible (ej. "DZ-10432")
+  fullName  String @map("full_name")
+
+  // Árbol de patrocinio (unilevel / generaciones) — ancho ilimitado
+  sponsorId String? @map("sponsor_id")
+  sponsor   Distributor?  @relation("SponsorTree", fields: [sponsorId], references: [id])
+  enrolled  Distributor[] @relation("SponsorTree")
+
+  // Árbol de colocación (binario) — máximo 2 hijos: LEFT / RIGHT
+  placementParentId String?       @map("placement_parent_id")
+  placementLeg      PlacementLeg? @map("placement_leg")
+  placementParent   Distributor?  @relation("PlacementTree", fields: [placementParentId], references: [id])
+  placementChildren Distributor[] @relation("PlacementTree")
+
+  rank              String             @default("Distribuidor")
+  status            DistributorStatus  @default(ACTIVE)
+  personalVolume    Decimal            @default(0) @map("personal_volume") @db.Decimal(12, 2)
+  joinedAt          DateTime           @default(now()) @map("joined_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId, sponsorId])
+  @@index([tenantId, placementParentId])
+  @@map("distributors")
+}
