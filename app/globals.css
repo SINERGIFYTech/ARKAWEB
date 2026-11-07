@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 20% 98%;
+    --foreground: 240 25% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 25% 12%;
+    --muted: 240 16% 95%;
+    --muted-foreground: 240 8% 46%;
+    --border: 240 14% 90%;
+    --primary: 258 85% 58%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 258 85% 96%;
+    --accent-foreground: 258 70% 42%;
+    --radius: 0.75rem;
+
+    /* Colores de apoyo para los widgets (todos con sentido, no decorativos) */
+    --success: 152 70% 40%;
+    --warning: 38 95% 52%;
+    --info: 199 90% 48%;
+  }
+
+  .dark {
+    --background: 245 30% 7%;
+    --foreground: 240 20% 94%;
+    --card: 245 26% 10%;
+    --card-foreground: 240 20% 94%;
+    --muted: 245 22% 15%;
+    --muted-foreground: 240 10% 62%;
+    --border: 245 20% 19%;
+    --primary: 258 90% 68%;
+    --primary-foreground: 245 30% 8%;
+    --accent: 258 40% 20%;
+    --accent-foreground: 258 90% 84%;
+
+    --success: 152 65% 52%;
+    --warning: 38 95% 60%;
+    --info: 199 90% 60%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  /* Encabezados de sección con gradiente — la "firma" visual del backoffice */
+  .surface-gradient {
+    background-image: linear-gradient(135deg, hsl(258 85% 58%) 0%, hsl(280 80% 55%) 55%, hsl(310 75% 52%) 100%);
+    color: white;
+  }
+
+  .surface-dark {
+    background-image:
+      radial-gradient(1200px 300px at 90% -20%, hsl(258 85% 45% / 0.55), transparent 60%),
+      radial-gradient(800px 260px at 0% 120%, hsl(310 75% 45% / 0.35), transparent 60%),
+      linear-gradient(135deg, hsl(245 35% 11%) 0%, hsl(250 40% 8%) 100%);
+    color: white;
+  }
+
+  .card-elevated {
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: 0 1px 2px hsl(240 30% 10% / 0.04), 0 8px 24px -12px hsl(258 60% 30% / 0.12);
+    transition: box-shadow 200ms ease, transform 200ms ease;
+  }
+
+  .card-elevated:hover {
+    box-shadow: 0 2px 4px hsl(240 30% 10% / 0.06), 0 14px 32px -14px hsl(258 70% 40% / 0.25);
+    transform: translateY(-1px);
+  }
+
+  .stat-glow {
+    box-shadow: 0 0 0 1px hsl(258 85% 58% / 0.25), 0 6px 20px -8px hsl(258 85% 58% / 0.55);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up {
+  animation: fade-up 450ms ease both;
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 1.6s ease-in-out infinite;
+}
+
+.progress-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    hsl(258 85% 58%) 0%,
+    hsl(300 80% 62%) 40%,
+    hsl(258 85% 58%) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.8s linear infinite;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 8px;
+}
